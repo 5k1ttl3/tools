@@ -1,0 +1,1411 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>RA Hardware Tracker</title>
+  <style>
+    :root {
+      --bg: #f4f6f8;
+      --panel: #ffffff;
+      --ink: #1f2937;
+      --muted: #6b7280;
+      --line: #d1d5db;
+      --accent: #0f766e;
+      --accent-2: #115e59;
+      --danger: #b91c1c;
+      --warn: #92400e;
+      --ok: #166534;
+      --green-bg: #dcfce7;
+      --red-bg: #fee2e2;
+      --neutral-bg: #e5e7eb;
+      --focus: #0ea5e9;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+      color: var(--ink);
+      background: linear-gradient(160deg, #eef5f4, #f8f8f8 50%, #eef2ff);
+      min-height: 100vh;
+      padding: 20px;
+    }
+
+    .app {
+      max-width: 1000px;
+      margin: 0 auto;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 16px;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+    }
+
+    h1 {
+      margin: 0 0 10px;
+      font-size: 1.4rem;
+    }
+
+    .toolbar,
+    .assign-row,
+    .export-row,
+    .stats,
+    .tab-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin: 12px 0;
+      align-items: center;
+    }
+
+    .assign-row {
+      align-items: flex-end;
+    }
+
+    .assign-row > button {
+      align-self: flex-end;
+      margin-bottom: 1px;
+    }
+
+    .toolbar button,
+    .assign-row button,
+    .export-row button,
+    .tab-row button,
+    select,
+    input[type="text"] {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 8px 10px;
+      font-size: 0.95rem;
+      background: #fff;
+    }
+
+    button {
+      cursor: pointer;
+      font-weight: 600;
+    }
+
+    button.primary {
+      background: var(--accent);
+      color: #fff;
+      border-color: var(--accent-2);
+    }
+
+    button.primary:hover { background: var(--accent-2); }
+
+    button.danger {
+      background: #fff;
+      color: var(--danger);
+      border-color: #fecaca;
+    }
+
+    button:focus-visible,
+    select:focus-visible,
+    input:focus-visible {
+      outline: 3px solid #bae6fd;
+      outline-offset: 1px;
+      border-color: var(--focus);
+    }
+
+    .banner {
+      margin: 8px 0;
+      padding: 10px;
+      border-radius: 8px;
+      display: none;
+      font-weight: 600;
+    }
+
+    .banner.error {
+      display: block;
+      background: #fee2e2;
+      color: #7f1d1d;
+      border: 1px solid #fecaca;
+    }
+
+    .banner.success {
+      display: block;
+      background: #dcfce7;
+      color: #14532d;
+      border: 1px solid #bbf7d0;
+    }
+
+    .banner.warn {
+      display: block;
+      background: #ffedd5;
+      color: #7c2d12;
+      border: 1px solid #fed7aa;
+    }
+
+    .tab-btn.active {
+      background: var(--accent);
+      color: #fff;
+      border-color: var(--accent-2);
+    }
+
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
+    .section-label {
+      margin: 14px 0 6px;
+      font-size: 0.85rem;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    .field {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      min-width: 220px;
+      flex: 1;
+      position: relative;
+    }
+
+    label { font-weight: 600; }
+
+    .suggestions {
+      position: absolute;
+      z-index: 10;
+      top: 72px;
+      left: 0;
+      right: 0;
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      max-height: 220px;
+      overflow: auto;
+      display: none;
+    }
+
+    .suggestions.open { display: block; }
+
+    .suggestion-item {
+      padding: 8px 10px;
+      border-bottom: 1px solid #e5e7eb;
+      cursor: pointer;
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      align-items: center;
+      font-size: 0.9rem;
+    }
+
+    .suggestion-item:last-child { border-bottom: none; }
+    .suggestion-item:hover,
+    .suggestion-item.active { background: #f3f4f6; }
+
+    .status-chip {
+      border-radius: 999px;
+      padding: 2px 8px;
+      font-size: 0.75rem;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+
+    .status-unassigned { background: var(--green-bg); color: var(--ok); }
+    .status-other { background: var(--red-bg); color: var(--danger); }
+    .status-selected { background: var(--neutral-bg); color: #374151; }
+
+    .panel {
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 12px;
+      margin-top: 10px;
+      background: #fcfcfd;
+    }
+
+    .panel h2 {
+      margin: 0 0 8px;
+      font-size: 1rem;
+    }
+
+    ul {
+      margin: 0;
+      padding-left: 18px;
+      max-height: 220px;
+      overflow: auto;
+    }
+
+    .stats span {
+      background: #f3f4f6;
+      border: 1px solid #e5e7eb;
+      border-radius: 999px;
+      padding: 6px 10px;
+      font-size: 0.9rem;
+      font-weight: 600;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.85rem;
+    }
+
+    th, td {
+      border-bottom: 1px solid #e5e7eb;
+      padding: 6px;
+      text-align: left;
+    }
+
+    @media (max-width: 640px) {
+      body { padding: 10px; }
+      .app { padding: 12px; }
+      .toolbar button,
+      .assign-row button,
+      .export-row button,
+      select,
+      input[type="text"] { width: 100%; }
+      .field { min-width: 100%; }
+      .assign-row > button {
+        align-self: auto;
+        margin-bottom: 0;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="app">
+    <h1>Conference Hardware Tracker</h1>
+
+    <div id="banner" class="banner" role="alert" aria-live="polite"></div>
+
+    <div class="tab-row">
+      <button id="operationsTabBtn" class="tab-btn active" type="button">Operations</button>
+      <button id="lookupTabBtn" class="tab-btn" type="button">Device Lookup</button>
+      <button id="dataTabBtn" class="tab-btn" type="button">Data</button>
+    </div>
+
+    <div id="operationsTab" class="tab-content active">
+    <div class="assign-row">
+      <div class="field">
+        <label for="roomSelect">Select Room</label>
+        <select id="roomSelect">
+          <option value="">-- Choose a room --</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label for="deviceInput">Device ID</label>
+        <input id="deviceInput" type="text" autocomplete="off" placeholder="Type device ID" />
+        <div id="suggestions" class="suggestions" role="listbox"></div>
+      </div>
+
+      <button id="assignBtn" class="primary" type="button">Assign Device</button>
+      <button id="undoBtn" type="button">Undo Last Assignment</button>
+    </div>
+
+    <div class="stats" id="stats"></div>
+
+    <section class="panel">
+      <h2 id="roomHeading">Devices currently in: (none selected)</h2>
+      <ul id="roomDeviceList"></ul>
+    </section>
+
+    <section class="panel">
+      <h2>Recent Movement Log</h2>
+      <table>
+        <thead>
+          <tr><th>Timestamp</th><th>Device</th><th>Room</th></tr>
+        </thead>
+        <tbody id="logTableBody"></tbody>
+      </table>
+    </section>
+    </div>
+
+    <div id="lookupTab" class="tab-content">
+      <div class="assign-row">
+        <div class="field">
+          <label for="lookupDeviceInput">Find Device</label>
+          <input id="lookupDeviceInput" type="text" autocomplete="off" placeholder="Type to filter devices" />
+          <div id="lookupSuggestions" class="suggestions" role="listbox"></div>
+        </div>
+        <button id="lookupDeviceBtn" class="primary" type="button">Lookup</button>
+      </div>
+
+      <section class="panel">
+        <h2>Device Status</h2>
+        <div id="lookupCurrentRoom">No device selected.</div>
+      </section>
+
+      <section class="panel">
+        <h2 id="lookupHistoryHeading">Full Device History</h2>
+        <table>
+          <thead>
+            <tr><th>Timestamp</th><th>Device</th><th>Room</th></tr>
+          </thead>
+          <tbody id="lookupHistoryBody"></tbody>
+        </table>
+      </section>
+    </div>
+
+    <div id="dataTab" class="tab-content">
+      <div class="section-label">Import</div>
+      <div class="toolbar">
+        <button id="importDevicesBtn" class="primary" type="button">Import Devices CSV</button>
+        <button id="importRoomsBtn" class="primary" type="button">Import Rooms CSV</button>
+        <button id="importJsonBtn" type="button">Import JSON Backup</button>
+        <button id="resetBtn" class="danger" type="button">Reset All Data</button>
+        <input id="devicesFileInput" type="file" accept=".csv,text/csv" hidden />
+        <input id="roomsFileInput" type="file" accept=".csv,text/csv" hidden />
+        <input id="jsonFileInput" type="file" accept=".json,application/json" hidden />
+      </div>
+
+      <div class="section-label">Create</div>
+      <div class="assign-row">
+        <div class="field">
+          <label for="addDeviceInput">Add Device ID</label>
+          <input id="addDeviceInput" type="text" autocomplete="off" placeholder="Ex: LAPTOP-55" />
+        </div>
+        <button id="addDeviceBtn" type="button">Add Device</button>
+
+        <div class="field">
+          <label for="addRoomInput">Add Room</label>
+          <input id="addRoomInput" type="text" autocomplete="off" placeholder="Ex: ROOM-Z" />
+        </div>
+        <button id="addRoomBtn" type="button">Add Room</button>
+      </div>
+
+      <div class="section-label">Export</div>
+      <div class="export-row">
+        <button id="exportLogBtn" type="button">Export Movement Log CSV</button>
+        <button id="exportStateBtn" type="button">Export Current State CSV</button>
+        <button id="exportRoomsBtn" type="button">Export Rooms CSV</button>
+        <button id="exportDevicesBtn" type="button">Export Devices CSV</button>
+        <button id="exportJsonBtn" type="button">Export JSON Backup</button>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    (function () {
+      "use strict";
+
+      var STORAGE_KEY = "ra_hardware_tracker_v1";
+      var UNASSIGNED_VALUE = "__UNASSIGNED__";
+      var UNASSIGNED_LABEL = "UNASSIGNED";
+      var devices = {};
+      var rooms = [];
+      var movementLog = [];
+      var assignmentStack = [];
+      var selectedSuggestionIndex = -1;
+      var latestSuggestions = [];
+      var selectedLookupSuggestionIndex = -1;
+      var latestLookupSuggestions = [];
+
+      var els = {
+        banner: document.getElementById("banner"),
+        importDevicesBtn: document.getElementById("importDevicesBtn"),
+        importRoomsBtn: document.getElementById("importRoomsBtn"),
+        importJsonBtn: document.getElementById("importJsonBtn"),
+        resetBtn: document.getElementById("resetBtn"),
+        devicesFileInput: document.getElementById("devicesFileInput"),
+        roomsFileInput: document.getElementById("roomsFileInput"),
+        jsonFileInput: document.getElementById("jsonFileInput"),
+        roomSelect: document.getElementById("roomSelect"),
+        deviceInput: document.getElementById("deviceInput"),
+        addDeviceInput: document.getElementById("addDeviceInput"),
+        addDeviceBtn: document.getElementById("addDeviceBtn"),
+        addRoomInput: document.getElementById("addRoomInput"),
+        addRoomBtn: document.getElementById("addRoomBtn"),
+        operationsTabBtn: document.getElementById("operationsTabBtn"),
+        lookupTabBtn: document.getElementById("lookupTabBtn"),
+        dataTabBtn: document.getElementById("dataTabBtn"),
+        operationsTab: document.getElementById("operationsTab"),
+        lookupTab: document.getElementById("lookupTab"),
+        dataTab: document.getElementById("dataTab"),
+        lookupDeviceInput: document.getElementById("lookupDeviceInput"),
+        lookupSuggestions: document.getElementById("lookupSuggestions"),
+        lookupDeviceBtn: document.getElementById("lookupDeviceBtn"),
+        lookupCurrentRoom: document.getElementById("lookupCurrentRoom"),
+        lookupHistoryHeading: document.getElementById("lookupHistoryHeading"),
+        lookupHistoryBody: document.getElementById("lookupHistoryBody"),
+        suggestions: document.getElementById("suggestions"),
+        assignBtn: document.getElementById("assignBtn"),
+        undoBtn: document.getElementById("undoBtn"),
+        stats: document.getElementById("stats"),
+        roomHeading: document.getElementById("roomHeading"),
+        roomDeviceList: document.getElementById("roomDeviceList"),
+        logTableBody: document.getElementById("logTableBody"),
+        exportLogBtn: document.getElementById("exportLogBtn"),
+        exportStateBtn: document.getElementById("exportStateBtn"),
+        exportRoomsBtn: document.getElementById("exportRoomsBtn"),
+        exportDevicesBtn: document.getElementById("exportDevicesBtn"),
+        exportJsonBtn: document.getElementById("exportJsonBtn")
+      };
+      var activeTab = "operations";
+
+      function normalizeId(value) {
+        return String(value || "").trim();
+      }
+
+      function parseSingleColumnCsv(csvText) {
+        var rows = csvText.split(/\r?\n/).map(function (line) { return line.trim(); }).filter(Boolean);
+        if (!rows.length) { return []; }
+        return rows.slice(1).map(function (line) {
+          var first = line.split(",")[0];
+          return normalizeId(first.replace(/^"|"$/g, ""));
+        }).filter(Boolean);
+      }
+
+      function saveState() {
+        var payload = {
+          devices: devices,
+          rooms: rooms,
+          movementLog: movementLog
+        };
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+      }
+
+      function loadState() {
+        try {
+          var raw = localStorage.getItem(STORAGE_KEY);
+          if (!raw) { return; }
+          var parsed = JSON.parse(raw);
+          devices = parsed.devices && typeof parsed.devices === "object" ? parsed.devices : {};
+          rooms = Array.isArray(parsed.rooms) ? parsed.rooms : [];
+          movementLog = Array.isArray(parsed.movementLog) ? parsed.movementLog : [];
+        } catch (err) {
+          devices = {};
+          rooms = [];
+          movementLog = [];
+          showBanner("Stored data was corrupted and has been reset.", "warn");
+          saveState();
+        }
+      }
+
+      function resetAllData() {
+        if (!window.confirm("Reset all devices, rooms, and movement history?")) { return; }
+        devices = {};
+        rooms = [];
+        movementLog = [];
+        assignmentStack = [];
+        saveState();
+        renderAll();
+        showBanner("All data reset.", "warn");
+      }
+
+      function showBanner(message, kind) {
+        els.banner.textContent = message;
+        els.banner.className = "banner " + (kind || "success");
+      }
+
+      function clearBanner() {
+        els.banner.className = "banner";
+        els.banner.textContent = "";
+      }
+
+      function roomOf(deviceId) {
+        return devices[deviceId] ? devices[deviceId].currentRoom : null;
+      }
+
+      function isUnassignedSelection(value) {
+        return value === UNASSIGNED_VALUE;
+      }
+
+      function selectionToRoom(value) {
+        return isUnassignedSelection(value) ? null : value;
+      }
+
+      function roomToLabel(value) {
+        return value || UNASSIGNED_LABEL;
+      }
+
+      function assignDevice(deviceId, targetRoom) {
+        var cleanDeviceId = normalizeId(deviceId).toUpperCase();
+        var destinationRoom = selectionToRoom(targetRoom);
+        if (!cleanDeviceId) {
+          showBanner("Device ID is required.", "error");
+          return false;
+        }
+
+        if (cleanDeviceId.length > 80) {
+          showBanner("Device ID input is too long.", "error");
+          return false;
+        }
+
+        if (!targetRoom) {
+          showBanner("Select a room before assigning.", "error");
+          return false;
+        }
+
+        if (!devices[cleanDeviceId]) {
+          showBanner("Device not recognized. Import devices CSV first.", "error");
+          return false;
+        }
+
+        var previousRoom = roomOf(cleanDeviceId);
+        if (previousRoom === destinationRoom) {
+          showBanner("No change: " + cleanDeviceId + " is already in " + roomToLabel(destinationRoom) + ".", "warn");
+          return false;
+        }
+
+        devices[cleanDeviceId].currentRoom = destinationRoom;
+        var entry = {
+          timestamp: new Date().toISOString(),
+          device: cleanDeviceId,
+          room: roomToLabel(destinationRoom)
+        };
+        movementLog.push(entry);
+        assignmentStack.push({
+          device: cleanDeviceId,
+          previousRoom: previousRoom,
+          newRoom: destinationRoom,
+          logIndex: movementLog.length - 1
+        });
+
+        saveState();
+        renderAll();
+
+        if (previousRoom) {
+          showBanner(cleanDeviceId + " moved from " + previousRoom + " to " + roomToLabel(destinationRoom) + ".", "success");
+        } else {
+          showBanner(cleanDeviceId + " assigned to " + roomToLabel(destinationRoom) + ".", "success");
+        }
+        return true;
+      }
+
+      function undoLastAssignment() {
+        var last = assignmentStack.pop();
+        if (!last) {
+          showBanner("Nothing to undo.", "warn");
+          return;
+        }
+
+        if (!devices[last.device]) {
+          showBanner("Cannot undo: device missing.", "error");
+          return;
+        }
+
+        devices[last.device].currentRoom = last.previousRoom || null;
+        if (movementLog.length - 1 === last.logIndex) {
+          movementLog.pop();
+        } else {
+          movementLog = movementLog.filter(function (_, idx) { return idx !== last.logIndex; });
+        }
+
+        saveState();
+        renderAll();
+        showBanner("Undid assignment for " + last.device + ".", "warn");
+      }
+
+      function buildRoomSelect() {
+        var selected = els.roomSelect.value;
+        els.roomSelect.innerHTML = "";
+
+        var placeholder = document.createElement("option");
+        placeholder.value = "";
+        placeholder.textContent = "-- Choose a room --";
+        els.roomSelect.appendChild(placeholder);
+
+        var unassignedOption = document.createElement("option");
+        unassignedOption.value = UNASSIGNED_VALUE;
+        unassignedOption.textContent = UNASSIGNED_LABEL;
+        els.roomSelect.appendChild(unassignedOption);
+
+        rooms.forEach(function (room) {
+          var option = document.createElement("option");
+          option.value = room;
+          option.textContent = room;
+          els.roomSelect.appendChild(option);
+        });
+
+        if (selected && (selected === UNASSIGNED_VALUE || rooms.indexOf(selected) !== -1)) {
+          els.roomSelect.value = selected;
+        }
+      }
+
+      function setActiveTab(tabName) {
+        if (tabName === "lookup" || tabName === "data") {
+          activeTab = tabName;
+        } else {
+          activeTab = "operations";
+        }
+
+        var isOperations = activeTab === "operations";
+        var isLookup = activeTab === "lookup";
+        var isData = activeTab === "data";
+
+        els.operationsTabBtn.classList.toggle("active", isOperations);
+        els.lookupTabBtn.classList.toggle("active", isLookup);
+        els.dataTabBtn.classList.toggle("active", isData);
+        els.operationsTab.classList.toggle("active", isOperations);
+        els.lookupTab.classList.toggle("active", isLookup);
+        els.dataTab.classList.toggle("active", isData);
+      }
+
+      function updateStats() {
+        var total = Object.keys(devices).length;
+        var assigned = 0;
+        Object.keys(devices).forEach(function (id) {
+          if (devices[id].currentRoom) { assigned += 1; }
+        });
+        var unassigned = total - assigned;
+        var room = els.roomSelect.value ? roomToLabel(selectionToRoom(els.roomSelect.value)) : "(none)";
+
+        els.stats.innerHTML = "";
+        [
+          "Selected room: " + room,
+          "Total devices: " + total,
+          "Assigned: " + assigned,
+          "Unassigned: " + unassigned,
+          "Log entries: " + movementLog.length
+        ].forEach(function (text) {
+          var tag = document.createElement("span");
+          tag.textContent = text;
+          els.stats.appendChild(tag);
+        });
+      }
+
+      function updateRoomDevicesPanel() {
+        var roomSelection = els.roomSelect.value;
+        var room = selectionToRoom(roomSelection);
+        els.roomHeading.textContent = roomSelection ? ("Devices currently in: " + roomToLabel(room)) : "Devices currently in: (none selected)";
+        els.roomDeviceList.innerHTML = "";
+
+        if (!roomSelection) { return; }
+
+        var list = Object.keys(devices).filter(function (deviceId) {
+          return devices[deviceId].currentRoom === room;
+        }).sort();
+
+        if (!list.length) {
+          var empty = document.createElement("li");
+          empty.textContent = "No devices assigned.";
+          els.roomDeviceList.appendChild(empty);
+          return;
+        }
+
+        list.forEach(function (deviceId) {
+          var li = document.createElement("li");
+          li.textContent = deviceId;
+          els.roomDeviceList.appendChild(li);
+        });
+      }
+
+      function updateLogTable() {
+        els.logTableBody.innerHTML = "";
+        var rows = movementLog.slice(-15).reverse();
+        rows.forEach(function (entry) {
+          var tr = document.createElement("tr");
+          var tdTime = document.createElement("td");
+          var tdDevice = document.createElement("td");
+          var tdRoom = document.createElement("td");
+          tdTime.textContent = formatTimestampForDisplay(entry.timestamp);
+          tdDevice.textContent = entry.device;
+          tdRoom.textContent = entry.room;
+          tr.appendChild(tdTime);
+          tr.appendChild(tdDevice);
+          tr.appendChild(tdRoom);
+          els.logTableBody.appendChild(tr);
+        });
+      }
+
+      function getLookupMatches(query) {
+        return Object.keys(devices).filter(function (id) {
+          return id.indexOf(query) !== -1;
+        });
+      }
+
+      function lookupDevice() {
+        var deviceId = normalizeId(els.lookupDeviceInput.value).toUpperCase();
+        els.lookupHistoryBody.innerHTML = "";
+
+        if (!deviceId) {
+          els.lookupCurrentRoom.textContent = "No device selected.";
+          els.lookupHistoryHeading.textContent = "Full Device History";
+          return;
+        }
+
+        var resolvedDeviceId = deviceId;
+        if (!devices[resolvedDeviceId]) {
+          var matches = getLookupMatches(deviceId);
+          if (matches.length === 1) {
+            resolvedDeviceId = matches[0];
+          } else if (matches.length > 1) {
+            els.lookupCurrentRoom.textContent = "Multiple devices match. Select one from suggestions.";
+            els.lookupHistoryHeading.textContent = "Full Device History";
+            return;
+          } else {
+            els.lookupCurrentRoom.textContent = "Device not found.";
+            els.lookupHistoryHeading.textContent = "Full Device History";
+            return;
+          }
+        }
+
+        if (!devices[resolvedDeviceId]) {
+          els.lookupCurrentRoom.textContent = "Device not found.";
+          els.lookupHistoryHeading.textContent = "Full Device History";
+          return;
+        }
+
+        var currentRoom = devices[resolvedDeviceId].currentRoom;
+        els.lookupCurrentRoom.textContent = "Current location: " + roomToLabel(currentRoom);
+
+        var entries = movementLog.filter(function (entry) {
+          return entry.device === resolvedDeviceId;
+        });
+
+        els.lookupHistoryHeading.textContent = "Full Device History (" + entries.length + " entries)";
+
+        if (!entries.length) {
+          var row = document.createElement("tr");
+          var cell = document.createElement("td");
+          cell.colSpan = 3;
+          cell.textContent = "No movement history for this device.";
+          row.appendChild(cell);
+          els.lookupHistoryBody.appendChild(row);
+          return;
+        }
+
+        entries.slice().reverse().forEach(function (entry) {
+          var tr = document.createElement("tr");
+          var tdTime = document.createElement("td");
+          var tdDevice = document.createElement("td");
+          var tdRoom = document.createElement("td");
+          tdTime.textContent = formatTimestampForDisplay(entry.timestamp);
+          tdDevice.textContent = resolvedDeviceId;
+          tdRoom.textContent = entry.room;
+          tr.appendChild(tdTime);
+          tr.appendChild(tdDevice);
+          tr.appendChild(tdRoom);
+          els.lookupHistoryBody.appendChild(tr);
+        });
+      }
+
+      function renderLookupSuggestions(items) {
+        els.lookupSuggestions.innerHTML = "";
+        latestLookupSuggestions = items;
+        selectedLookupSuggestionIndex = -1;
+
+        if (!items.length) {
+          els.lookupSuggestions.classList.remove("open");
+          return;
+        }
+
+        items.forEach(function (item, idx) {
+          var div = document.createElement("div");
+          div.className = "suggestion-item";
+          div.setAttribute("role", "option");
+          div.setAttribute("data-index", String(idx));
+
+          var left = document.createElement("span");
+          left.textContent = item.device;
+
+          var right = document.createElement("span");
+          right.className = "status-chip " + item.statusClass;
+          right.textContent = item.statusLabel;
+
+          div.appendChild(left);
+          div.appendChild(right);
+          div.addEventListener("mousedown", function (evt) {
+            evt.preventDefault();
+            pickLookupSuggestion(idx);
+          });
+          els.lookupSuggestions.appendChild(div);
+        });
+
+        els.lookupSuggestions.classList.add("open");
+      }
+
+      function pickLookupSuggestion(idx) {
+        var item = latestLookupSuggestions[idx];
+        if (!item) { return; }
+        els.lookupDeviceInput.value = item.device;
+        els.lookupSuggestions.classList.remove("open");
+        lookupDevice();
+      }
+
+      function updateLookupAutocomplete() {
+        var query = normalizeId(els.lookupDeviceInput.value).toUpperCase();
+        if (!query || query.length > 80) {
+          renderLookupSuggestions([]);
+          if (!query) {
+            lookupDevice();
+          }
+          return;
+        }
+
+        var matches = Object.keys(devices)
+          .filter(function (id) { return id.indexOf(query) !== -1; })
+          .map(function (id) {
+            var current = devices[id].currentRoom;
+            if (!current) {
+              return { device: id, statusLabel: "Unassigned", statusClass: "status-unassigned" };
+            }
+            return { device: id, statusLabel: "In " + current, statusClass: "status-other" };
+          });
+
+        renderLookupSuggestions(matches);
+      }
+
+      function highlightLookupSuggestion(index) {
+        var nodes = els.lookupSuggestions.querySelectorAll(".suggestion-item");
+        nodes.forEach(function (node, idx) {
+          if (idx === index) {
+            node.classList.add("active");
+            node.scrollIntoView({ block: "nearest" });
+          } else {
+            node.classList.remove("active");
+          }
+        });
+      }
+
+      function renderSuggestions(items) {
+        els.suggestions.innerHTML = "";
+        latestSuggestions = items;
+        selectedSuggestionIndex = -1;
+
+        if (!items.length) {
+          els.suggestions.classList.remove("open");
+          return;
+        }
+
+        items.forEach(function (item, idx) {
+          var div = document.createElement("div");
+          div.className = "suggestion-item";
+          div.setAttribute("role", "option");
+          div.setAttribute("data-index", String(idx));
+
+          var left = document.createElement("span");
+          left.textContent = item.device;
+
+          var right = document.createElement("span");
+          right.className = "status-chip " + item.statusClass;
+          right.textContent = item.statusLabel;
+
+          div.appendChild(left);
+          div.appendChild(right);
+
+          div.addEventListener("mousedown", function (evt) {
+            evt.preventDefault();
+            pickSuggestion(idx);
+          });
+
+          els.suggestions.appendChild(div);
+        });
+
+        els.suggestions.classList.add("open");
+      }
+
+      function pickSuggestion(idx) {
+        var item = latestSuggestions[idx];
+        if (!item) { return; }
+        els.deviceInput.value = item.device;
+        els.suggestions.classList.remove("open");
+        selectedSuggestionIndex = -1;
+        els.deviceInput.focus();
+      }
+
+      function updateAutocomplete() {
+        var query = normalizeId(els.deviceInput.value).toUpperCase();
+        if (!query || query.length > 80) {
+          renderSuggestions([]);
+          return;
+        }
+
+        var selectedRoom = selectionToRoom(els.roomSelect.value);
+        var matches = Object.keys(devices)
+          .filter(function (id) { return id.indexOf(query) !== -1; })
+          .map(function (id) {
+            var current = devices[id].currentRoom;
+            if (!current) {
+              if (selectedRoom === null && isUnassignedSelection(els.roomSelect.value)) {
+                return { device: id, statusLabel: "In selected room", statusClass: "status-selected" };
+              }
+              return { device: id, statusLabel: "Unassigned", statusClass: "status-unassigned" };
+            }
+            if (selectedRoom && current === selectedRoom) {
+              return { device: id, statusLabel: "In selected room", statusClass: "status-selected" };
+            }
+            return { device: id, statusLabel: "In " + current, statusClass: "status-other" };
+          });
+
+        renderSuggestions(matches);
+      }
+
+      function highlightSuggestion(index) {
+        var nodes = els.suggestions.querySelectorAll(".suggestion-item");
+        nodes.forEach(function (node, idx) {
+          if (idx === index) {
+            node.classList.add("active");
+            node.scrollIntoView({ block: "nearest" });
+          } else {
+            node.classList.remove("active");
+          }
+        });
+      }
+
+      function formatTimestampForDisplay(isoString) {
+        var date = new Date(isoString);
+        if (Number.isNaN(date.getTime())) {
+          return String(isoString || "");
+        }
+        return date.toLocaleString([], {
+          year: "numeric",
+          month: "short",
+          day: "2-digit",
+          hour: "2-digit",
+          minute: "2-digit",
+          second: "2-digit"
+        });
+      }
+
+      function toCsvLine(parts) {
+        return parts.map(function (part) {
+          var text = String(part == null ? "" : part);
+          if (/[",\n]/.test(text)) {
+            return '"' + text.replace(/"/g, '""') + '"';
+          }
+          return text;
+        }).join(",");
+      }
+
+      function downloadCsv(filename, lines) {
+        var blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8;" });
+        var url = URL.createObjectURL(blob);
+        var a = document.createElement("a");
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+      }
+
+      function exportMovementLog() {
+        var lines = [toCsvLine(["timestamp", "device", "room"])];
+        movementLog.forEach(function (entry) {
+          lines.push(toCsvLine([entry.timestamp, entry.device, entry.room]));
+        });
+        downloadCsv("movement_log.csv", lines);
+        showBanner("Movement log exported.", "success");
+      }
+
+      function exportCurrentState() {
+        var lines = [toCsvLine(["device", "current_room"])];
+        Object.keys(devices).sort().forEach(function (deviceId) {
+          lines.push(toCsvLine([deviceId, devices[deviceId].currentRoom || ""]));
+        });
+        downloadCsv("current_state.csv", lines);
+        showBanner("Current state exported.", "success");
+      }
+
+      function exportRoomsCsv() {
+        var lines = [toCsvLine(["room"])];
+        rooms.slice().sort().forEach(function (room) {
+          lines.push(toCsvLine([room]));
+        });
+        downloadCsv("rooms.csv", lines);
+        if (rooms.length) {
+          showBanner("Rooms CSV exported.", "success");
+        } else {
+          showBanner("No rooms found. Exported room template CSV.", "warn");
+        }
+      }
+
+      function exportDevicesCsv() {
+        var lines = [toCsvLine(["device"])];
+        Object.keys(devices).sort().forEach(function (deviceId) {
+          lines.push(toCsvLine([deviceId]));
+        });
+        downloadCsv("devices.csv", lines);
+        if (Object.keys(devices).length) {
+          showBanner("Devices CSV exported.", "success");
+        } else {
+          showBanner("No devices found. Exported device template CSV.", "warn");
+        }
+      }
+
+      function exportJsonBackup() {
+        var backup = {
+          exportedAt: new Date().toISOString(),
+          devices: devices,
+          rooms: rooms,
+          movementLog: movementLog
+        };
+        var blob = new Blob([JSON.stringify(backup, null, 2)], { type: "application/json;charset=utf-8;" });
+        var url = URL.createObjectURL(blob);
+        var a = document.createElement("a");
+        a.href = url;
+        a.download = "hardware_tracker_backup.json";
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+        showBanner("JSON backup exported.", "success");
+      }
+
+      function importDevicesFromCsv(text) {
+        var parsed = parseSingleColumnCsv(text).map(function (id) { return id.toUpperCase(); });
+        if (!parsed.length) {
+          showBanner("No device IDs found in CSV.", "error");
+          return;
+        }
+
+        if (Object.keys(devices).length > 0) {
+          var overwrite = window.confirm("Devices already exist. Overwrite device list and clear current assignments?");
+          if (!overwrite) {
+            showBanner("Device import canceled.", "warn");
+            return;
+          }
+        }
+
+        var nextDevices = {};
+        parsed.forEach(function (id) {
+          nextDevices[id] = { currentRoom: null };
+        });
+
+        devices = nextDevices;
+        assignmentStack = [];
+
+        movementLog = movementLog.filter(function (entry) {
+          return Boolean(devices[entry.device]);
+        });
+
+        saveState();
+        renderAll();
+        showBanner("Imported " + Object.keys(devices).length + " devices.", "success");
+      }
+
+      function importRoomsFromCsv(text) {
+        var parsed = parseSingleColumnCsv(text);
+        if (!parsed.length) {
+          showBanner("No rooms found in CSV.", "error");
+          return;
+        }
+
+        if (rooms.length > 0) {
+          var overwrite = window.confirm("Rooms already exist. Overwrite room list?");
+          if (!overwrite) {
+            showBanner("Room import canceled.", "warn");
+            return;
+          }
+        }
+
+        rooms = Array.from(new Set(parsed));
+
+        Object.keys(devices).forEach(function (deviceId) {
+          var room = devices[deviceId].currentRoom;
+          if (room && rooms.indexOf(room) === -1) {
+            devices[deviceId].currentRoom = null;
+          }
+        });
+
+        movementLog = movementLog.filter(function (entry) {
+          return entry.room === UNASSIGNED_LABEL || rooms.indexOf(entry.room) !== -1;
+        });
+
+        saveState();
+        renderAll();
+        showBanner("Imported " + rooms.length + " rooms.", "success");
+      }
+
+      function importJsonBackup(text) {
+        var parsed;
+        try {
+          parsed = JSON.parse(text);
+        } catch (err) {
+          showBanner("Invalid JSON file.", "error");
+          return;
+        }
+
+        if (!parsed || typeof parsed !== "object") {
+          showBanner("Backup format is invalid.", "error");
+          return;
+        }
+
+        var incomingRooms = Array.isArray(parsed.rooms) ? parsed.rooms : [];
+        var incomingDevices = parsed.devices && typeof parsed.devices === "object" ? parsed.devices : null;
+        var incomingLog = Array.isArray(parsed.movementLog) ? parsed.movementLog : [];
+
+        if (!incomingDevices) {
+          showBanner("Backup is missing a valid devices object.", "error");
+          return;
+        }
+
+        var overwrite = window.confirm("Import JSON backup and replace current local data?");
+        if (!overwrite) {
+          showBanner("JSON import canceled.", "warn");
+          return;
+        }
+
+        var nextRooms = Array.from(new Set(incomingRooms.map(function (room) {
+          return normalizeId(room);
+        }).filter(Boolean)));
+
+        var nextDevices = {};
+        Object.keys(incomingDevices).forEach(function (rawDeviceId) {
+          var deviceId = normalizeId(rawDeviceId).toUpperCase();
+          if (!deviceId) { return; }
+          var currentRoom = incomingDevices[rawDeviceId] && normalizeId(incomingDevices[rawDeviceId].currentRoom);
+          nextDevices[deviceId] = {
+            currentRoom: currentRoom && nextRooms.indexOf(currentRoom) !== -1 ? currentRoom : null
+          };
+        });
+
+        var nextLog = incomingLog.map(function (entry) {
+          if (!entry || typeof entry !== "object") { return null; }
+          var ts = normalizeId(entry.timestamp);
+          var device = normalizeId(entry.device).toUpperCase();
+          var room = normalizeId(entry.room);
+          if (!ts || !device || !room) { return null; }
+          if (!nextDevices[device]) { return null; }
+          if (room !== UNASSIGNED_LABEL && nextRooms.indexOf(room) === -1) { return null; }
+          return { timestamp: ts, device: device, room: room };
+        }).filter(Boolean);
+
+        devices = nextDevices;
+        rooms = nextRooms;
+        movementLog = nextLog;
+        assignmentStack = [];
+
+        saveState();
+        renderAll();
+        showBanner("JSON backup imported.", "success");
+      }
+
+      function addDeviceManually() {
+        var deviceId = normalizeId(els.addDeviceInput.value).toUpperCase();
+        if (!deviceId) {
+          showBanner("Enter a device ID to add.", "error");
+          return;
+        }
+        if (deviceId.length > 80) {
+          showBanner("Device ID is too long.", "error");
+          return;
+        }
+        if (devices[deviceId]) {
+          showBanner("Device already exists.", "warn");
+          return;
+        }
+
+        devices[deviceId] = { currentRoom: null };
+        saveState();
+        renderAll();
+        els.addDeviceInput.value = "";
+        showBanner("Device " + deviceId + " added.", "success");
+      }
+
+      function addRoomManually() {
+        var roomId = normalizeId(els.addRoomInput.value);
+        if (!roomId) {
+          showBanner("Enter a room name to add.", "error");
+          return;
+        }
+        if (roomId.length > 80) {
+          showBanner("Room name is too long.", "error");
+          return;
+        }
+        if (rooms.indexOf(roomId) !== -1) {
+          showBanner("Room already exists.", "warn");
+          return;
+        }
+
+        rooms.push(roomId);
+        saveState();
+        renderAll();
+        els.roomSelect.value = roomId;
+        updateStats();
+        updateRoomDevicesPanel();
+        updateAutocomplete();
+        els.addRoomInput.value = "";
+        showBanner("Room " + roomId + " added.", "success");
+      }
+
+      function readFileText(file, onSuccess) {
+        var reader = new FileReader();
+        reader.onload = function () {
+          onSuccess(String(reader.result || ""));
+        };
+        reader.onerror = function () {
+          showBanner("Failed to read file.", "error");
+        };
+        reader.readAsText(file);
+      }
+
+      function handleAssignClick() {
+        assignDevice(els.deviceInput.value, els.roomSelect.value);
+        els.deviceInput.select();
+      }
+
+      function renderAll() {
+        buildRoomSelect();
+        updateStats();
+        updateRoomDevicesPanel();
+        updateLogTable();
+        updateAutocomplete();
+        updateLookupAutocomplete();
+        lookupDevice();
+      }
+
+      function bindEvents() {
+        els.importDevicesBtn.addEventListener("click", function () {
+          clearBanner();
+          els.devicesFileInput.value = "";
+          els.devicesFileInput.click();
+        });
+
+        els.importRoomsBtn.addEventListener("click", function () {
+          clearBanner();
+          els.roomsFileInput.value = "";
+          els.roomsFileInput.click();
+        });
+
+        els.importJsonBtn.addEventListener("click", function () {
+          clearBanner();
+          els.jsonFileInput.value = "";
+          els.jsonFileInput.click();
+        });
+
+        els.devicesFileInput.addEventListener("change", function (evt) {
+          var file = evt.target.files && evt.target.files[0];
+          if (!file) { return; }
+          readFileText(file, importDevicesFromCsv);
+        });
+
+        els.roomsFileInput.addEventListener("change", function (evt) {
+          var file = evt.target.files && evt.target.files[0];
+          if (!file) { return; }
+          readFileText(file, importRoomsFromCsv);
+        });
+
+        els.jsonFileInput.addEventListener("change", function (evt) {
+          var file = evt.target.files && evt.target.files[0];
+          if (!file) { return; }
+          readFileText(file, importJsonBackup);
+        });
+
+        els.roomSelect.addEventListener("change", function () {
+          updateStats();
+          updateRoomDevicesPanel();
+          updateAutocomplete();
+        });
+
+        els.operationsTabBtn.addEventListener("click", function () {
+          setActiveTab("operations");
+        });
+        els.lookupTabBtn.addEventListener("click", function () {
+          setActiveTab("lookup");
+        });
+        els.dataTabBtn.addEventListener("click", function () {
+          setActiveTab("data");
+        });
+
+        els.deviceInput.addEventListener("input", function () {
+          clearBanner();
+          updateAutocomplete();
+        });
+
+        els.lookupDeviceInput.addEventListener("keydown", function (evt) {
+          var max = latestLookupSuggestions.length - 1;
+
+          if (evt.key === "ArrowDown" && max >= 0) {
+            evt.preventDefault();
+            selectedLookupSuggestionIndex = selectedLookupSuggestionIndex >= max ? 0 : selectedLookupSuggestionIndex + 1;
+            highlightLookupSuggestion(selectedLookupSuggestionIndex);
+            return;
+          }
+
+          if (evt.key === "ArrowUp" && max >= 0) {
+            evt.preventDefault();
+            selectedLookupSuggestionIndex = selectedLookupSuggestionIndex <= 0 ? max : selectedLookupSuggestionIndex - 1;
+            highlightLookupSuggestion(selectedLookupSuggestionIndex);
+            return;
+          }
+
+          if (evt.key === "Enter") {
+            evt.preventDefault();
+            if (selectedLookupSuggestionIndex >= 0 && latestLookupSuggestions[selectedLookupSuggestionIndex]) {
+              pickLookupSuggestion(selectedLookupSuggestionIndex);
+            } else {
+              lookupDevice();
+            }
+            return;
+          }
+
+          if (evt.key === "Escape") {
+            els.lookupSuggestions.classList.remove("open");
+          }
+        });
+
+        els.lookupDeviceInput.addEventListener("input", function () {
+          updateLookupAutocomplete();
+          lookupDevice();
+        });
+
+        els.deviceInput.addEventListener("keydown", function (evt) {
+          var max = latestSuggestions.length - 1;
+
+          if (evt.key === "ArrowDown" && max >= 0) {
+            evt.preventDefault();
+            selectedSuggestionIndex = selectedSuggestionIndex >= max ? 0 : selectedSuggestionIndex + 1;
+            highlightSuggestion(selectedSuggestionIndex);
+            return;
+          }
+
+          if (evt.key === "ArrowUp" && max >= 0) {
+            evt.preventDefault();
+            selectedSuggestionIndex = selectedSuggestionIndex <= 0 ? max : selectedSuggestionIndex - 1;
+            highlightSuggestion(selectedSuggestionIndex);
+            return;
+          }
+
+          if (evt.key === "Enter") {
+            evt.preventDefault();
+            if (selectedSuggestionIndex >= 0 && latestSuggestions[selectedSuggestionIndex]) {
+              pickSuggestion(selectedSuggestionIndex);
+            } else {
+              handleAssignClick();
+            }
+            return;
+          }
+
+          if (evt.key === "Escape") {
+            els.suggestions.classList.remove("open");
+          }
+        });
+
+        document.addEventListener("click", function (evt) {
+          if (!els.suggestions.contains(evt.target) && evt.target !== els.deviceInput) {
+            els.suggestions.classList.remove("open");
+          }
+          if (!els.lookupSuggestions.contains(evt.target) && evt.target !== els.lookupDeviceInput) {
+            els.lookupSuggestions.classList.remove("open");
+          }
+        });
+
+        els.assignBtn.addEventListener("click", handleAssignClick);
+        els.undoBtn.addEventListener("click", undoLastAssignment);
+        els.addDeviceBtn.addEventListener("click", addDeviceManually);
+        els.addRoomBtn.addEventListener("click", addRoomManually);
+        els.addDeviceInput.addEventListener("keydown", function (evt) {
+          if (evt.key === "Enter") {
+            evt.preventDefault();
+            addDeviceManually();
+          }
+        });
+        els.addRoomInput.addEventListener("keydown", function (evt) {
+          if (evt.key === "Enter") {
+            evt.preventDefault();
+            addRoomManually();
+          }
+        });
+        els.resetBtn.addEventListener("click", resetAllData);
+        els.exportLogBtn.addEventListener("click", exportMovementLog);
+        els.exportStateBtn.addEventListener("click", exportCurrentState);
+        els.exportRoomsBtn.addEventListener("click", exportRoomsCsv);
+        els.exportDevicesBtn.addEventListener("click", exportDevicesCsv);
+        els.exportJsonBtn.addEventListener("click", exportJsonBackup);
+        els.lookupDeviceBtn.addEventListener("click", lookupDevice);
+      }
+
+      loadState();
+      bindEvents();
+      renderAll();
+    })();
+  </script>
+</body>
+</html>
