@@ -146,6 +146,16 @@
 
     .tab-content { display: none; }
     .tab-content.active { display: block; }
+    .checkbox-label {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: var(--muted);
+      margin-top: 2px;
+      cursor: pointer;
+    }
     .section-label {
       margin: 14px 0 6px;
       font-size: 0.85rem;
@@ -289,7 +299,14 @@
 
       <div class="field">
         <label for="deviceInput">Device ID</label>
+        <label class="checkbox-label" for="devicePickerModeToggle">
+          <input id="devicePickerModeToggle" type="checkbox" />
+          Use dropdown picker
+        </label>
         <input id="deviceInput" type="text" autocomplete="off" placeholder="Type device ID" />
+        <select id="deviceSelect" hidden>
+          <option value="">-- Choose a device --</option>
+        </select>
         <div id="suggestions" class="suggestions" role="listbox"></div>
       </div>
 
@@ -406,6 +423,8 @@
         jsonFileInput: document.getElementById("jsonFileInput"),
         roomSelect: document.getElementById("roomSelect"),
         deviceInput: document.getElementById("deviceInput"),
+        deviceSelect: document.getElementById("deviceSelect"),
+        devicePickerModeToggle: document.getElementById("devicePickerModeToggle"),
         addDeviceInput: document.getElementById("addDeviceInput"),
         addDeviceBtn: document.getElementById("addDeviceBtn"),
         addRoomInput: document.getElementById("addRoomInput"),
@@ -615,6 +634,54 @@
         if (selected && (selected === UNASSIGNED_VALUE || rooms.indexOf(selected) !== -1)) {
           els.roomSelect.value = selected;
         }
+      }
+
+      function buildDeviceSelect() {
+        var selected = normalizeId(els.deviceSelect.value).toUpperCase();
+        els.deviceSelect.innerHTML = "";
+
+        var placeholder = document.createElement("option");
+        placeholder.value = "";
+        placeholder.textContent = "-- Choose a device --";
+        els.deviceSelect.appendChild(placeholder);
+
+        Object.keys(devices).sort().forEach(function (deviceId) {
+          var option = document.createElement("option");
+          option.value = deviceId;
+          option.textContent = deviceId + " (" + roomToLabel(devices[deviceId].currentRoom) + ")";
+          els.deviceSelect.appendChild(option);
+        });
+
+        if (selected && devices[selected]) {
+          els.deviceSelect.value = selected;
+          return;
+        }
+
+        var typed = normalizeId(els.deviceInput.value).toUpperCase();
+        if (typed && devices[typed]) {
+          els.deviceSelect.value = typed;
+        }
+      }
+
+      function applyDevicePickerMode() {
+        var useDropdown = Boolean(els.devicePickerModeToggle.checked);
+        var typed = normalizeId(els.deviceInput.value).toUpperCase();
+        var selected = normalizeId(els.deviceSelect.value).toUpperCase();
+
+        if (useDropdown && typed && devices[typed]) {
+          els.deviceSelect.value = typed;
+        }
+        if (!useDropdown && selected) {
+          els.deviceInput.value = selected;
+        }
+
+        els.deviceInput.hidden = useDropdown;
+        els.deviceSelect.hidden = !useDropdown;
+        if (useDropdown) {
+          renderSuggestions([]);
+          return;
+        }
+        updateAutocomplete();
       }
 
       function setActiveTab(tabName) {
@@ -900,6 +967,11 @@
       }
 
       function updateAutocomplete() {
+        if (els.devicePickerModeToggle.checked) {
+          renderSuggestions([]);
+          return;
+        }
+
         var query = normalizeId(els.deviceInput.value).toUpperCase();
         if (!query || query.length > 80) {
           renderSuggestions([]);
@@ -1227,16 +1299,24 @@
       }
 
       function handleAssignClick() {
-        assignDevice(els.deviceInput.value, els.roomSelect.value);
-        els.deviceInput.select();
+        var selectedDeviceId = els.devicePickerModeToggle.checked ? els.deviceSelect.value : els.deviceInput.value;
+        var assigned = assignDevice(selectedDeviceId, els.roomSelect.value);
+        if (!assigned) { return; }
+
+        if (els.devicePickerModeToggle.checked) {
+          els.deviceSelect.focus();
+        } else {
+          els.deviceInput.select();
+        }
       }
 
       function renderAll() {
         buildRoomSelect();
+        buildDeviceSelect();
+        applyDevicePickerMode();
         updateStats();
         updateRoomDevicesPanel();
         updateLogTable();
-        updateAutocomplete();
         updateLookupAutocomplete();
         lookupDevice();
       }
@@ -1297,6 +1377,15 @@
         els.deviceInput.addEventListener("input", function () {
           clearBanner();
           updateAutocomplete();
+        });
+
+        els.devicePickerModeToggle.addEventListener("change", function () {
+          clearBanner();
+          applyDevicePickerMode();
+        });
+
+        els.deviceSelect.addEventListener("change", function () {
+          clearBanner();
         });
 
         els.lookupDeviceInput.addEventListener("keydown", function (evt) {
