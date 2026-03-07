@@ -364,6 +364,7 @@
         <button id="importDevicesBtn" class="primary" type="button">Import Devices CSV</button>
         <button id="importRoomsBtn" class="primary" type="button">Import Rooms CSV</button>
         <button id="importJsonBtn" type="button">Import JSON Backup</button>
+        <button id="clearStateBtn" class="danger" type="button">Clear All State</button>
         <button id="resetBtn" class="danger" type="button">Reset All Data</button>
         <input id="devicesFileInput" type="file" accept=".csv,text/csv" hidden />
         <input id="roomsFileInput" type="file" accept=".csv,text/csv" hidden />
@@ -418,6 +419,7 @@
         importDevicesBtn: document.getElementById("importDevicesBtn"),
         importRoomsBtn: document.getElementById("importRoomsBtn"),
         importJsonBtn: document.getElementById("importJsonBtn"),
+        clearStateBtn: document.getElementById("clearStateBtn"),
         resetBtn: document.getElementById("resetBtn"),
         devicesFileInput: document.getElementById("devicesFileInput"),
         roomsFileInput: document.getElementById("roomsFileInput"),
@@ -527,6 +529,18 @@
         saveState();
         renderAll();
         showBanner("All data reset.", "warn");
+      }
+
+      function clearAllState() {
+        if (!window.confirm("Clear all assignment state? This will keep devices and rooms, but set every device to UNASSIGNED and permanently delete movement history.")) { return; }
+        Object.keys(devices).forEach(function (deviceId) {
+          devices[deviceId].currentRoom = null;
+        });
+        movementLog = [];
+        assignmentStack = [];
+        saveState();
+        renderAll();
+        showBanner("All assignments and movement history cleared. Devices and rooms were kept.", "warn");
       }
 
       function showBanner(message, kind) {
@@ -1504,6 +1518,7 @@
             addRoomManually();
           }
         });
+        els.clearStateBtn.addEventListener("click", clearAllState);
         els.resetBtn.addEventListener("click", resetAllData);
         els.exportLogBtn.addEventListener("click", exportMovementLog);
         els.exportStateBtn.addEventListener("click", exportCurrentState);
