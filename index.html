@@ -232,6 +232,29 @@
       font-size: 1rem;
     }
 
+    .device-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      max-height: 320px;
+      overflow: auto;
+    }
+
+    .device-list-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      padding: 8px 10px;
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+      background: #fff;
+    }
+
+    .device-list-item strong {
+      font-size: 0.95rem;
+    }
+
     ul {
       margin: 0;
       padding-left: 18px;
@@ -284,7 +307,8 @@
 
     <div class="tab-row">
       <button id="operationsTabBtn" class="tab-btn active" type="button">Operations</button>
-      <button id="lookupTabBtn" class="tab-btn" type="button">Device Lookup</button>
+      <button id="roomViewTabBtn" class="tab-btn" type="button">Room View</button>
+      <button id="lookupTabBtn" class="tab-btn" type="button">Device View</button>
       <button id="dataTabBtn" class="tab-btn" type="button">Data</button>
     </div>
 
@@ -332,14 +356,43 @@
     </section>
     </div>
 
+    <div id="roomViewTab" class="tab-content">
+      <div class="assign-row">
+        <div class="field">
+          <label for="roomViewSelect">Select Room</label>
+          <select id="roomViewSelect">
+            <option value="">-- Choose a room --</option>
+          </select>
+        </div>
+      </div>
+
+      <section class="panel">
+        <h2 id="roomViewHeading">Devices currently in: (none selected)</h2>
+        <div id="roomViewCount">Select a room to inspect its assigned devices.</div>
+        <div id="roomViewDeviceList" class="device-list"></div>
+      </section>
+
+      <section class="panel">
+        <h2 id="roomHistoryHeading">Room History</h2>
+        <table>
+          <thead>
+            <tr><th>Timestamp</th><th>Device</th><th>Action</th></tr>
+          </thead>
+          <tbody id="roomHistoryBody"></tbody>
+        </table>
+      </section>
+    </div>
+
     <div id="lookupTab" class="tab-content">
       <div class="assign-row">
         <div class="field">
-          <label for="lookupDeviceInput">Find Device</label>
-          <input id="lookupDeviceInput" type="text" autocomplete="off" placeholder="Type to filter devices" />
-          <div id="lookupSuggestions" class="suggestions" role="listbox"></div>
+          <label for="lookupDeviceSelect">Select Device</label>
+          <select id="lookupDeviceSelect">
+            <option value="">-- Choose a device --</option>
+          </select>
         </div>
-        <button id="lookupDeviceBtn" class="primary" type="button">Lookup</button>
+        <button id="renameDeviceBtn" type="button">Rename Device</button>
+        <button id="deleteDeviceBtn" class="danger" type="button">Delete Device</button>
       </div>
 
       <section class="panel">
@@ -411,9 +464,6 @@
       var assignmentStack = [];
       var selectedSuggestionIndex = -1;
       var latestSuggestions = [];
-      var selectedLookupSuggestionIndex = -1;
-      var latestLookupSuggestions = [];
-
       var els = {
         banner: document.getElementById("banner"),
         importDevicesBtn: document.getElementById("importDevicesBtn"),
@@ -433,14 +483,22 @@
         addRoomInput: document.getElementById("addRoomInput"),
         addRoomBtn: document.getElementById("addRoomBtn"),
         operationsTabBtn: document.getElementById("operationsTabBtn"),
+        roomViewTabBtn: document.getElementById("roomViewTabBtn"),
         lookupTabBtn: document.getElementById("lookupTabBtn"),
         dataTabBtn: document.getElementById("dataTabBtn"),
         operationsTab: document.getElementById("operationsTab"),
+        roomViewTab: document.getElementById("roomViewTab"),
         lookupTab: document.getElementById("lookupTab"),
         dataTab: document.getElementById("dataTab"),
-        lookupDeviceInput: document.getElementById("lookupDeviceInput"),
-        lookupSuggestions: document.getElementById("lookupSuggestions"),
-        lookupDeviceBtn: document.getElementById("lookupDeviceBtn"),
+        roomViewSelect: document.getElementById("roomViewSelect"),
+        roomViewHeading: document.getElementById("roomViewHeading"),
+        roomViewCount: document.getElementById("roomViewCount"),
+        roomViewDeviceList: document.getElementById("roomViewDeviceList"),
+        roomHistoryHeading: document.getElementById("roomHistoryHeading"),
+        roomHistoryBody: document.getElementById("roomHistoryBody"),
+        lookupDeviceSelect: document.getElementById("lookupDeviceSelect"),
+        renameDeviceBtn: document.getElementById("renameDeviceBtn"),
+        deleteDeviceBtn: document.getElementById("deleteDeviceBtn"),
         lookupCurrentRoom: document.getElementById("lookupCurrentRoom"),
         lookupHistoryHeading: document.getElementById("lookupHistoryHeading"),
         lookupHistoryBody: document.getElementById("lookupHistoryBody"),
@@ -569,6 +627,36 @@
         return value || UNASSIGNED_LABEL;
       }
 
+      function getRoomDeviceCount(roomName) {
+        return Object.keys(devices).filter(function (deviceId) {
+          return devices[deviceId].currentRoom === roomName;
+        }).length;
+      }
+
+      function formatRoomOptionLabel(roomName) {
+        var count = getRoomDeviceCount(roomName);
+        if (count > 0) {
+          return "(" + count + ") " + roomName;
+        }
+        return roomName;
+      }
+
+      function recordAssignment(deviceId, previousRoom, destinationRoom) {
+        devices[deviceId].currentRoom = destinationRoom;
+        var entry = {
+          timestamp: new Date().toISOString(),
+          device: deviceId,
+          room: roomToLabel(destinationRoom)
+        };
+        movementLog.push(entry);
+        assignmentStack.push({
+          device: deviceId,
+          previousRoom: previousRoom,
+          newRoom: destinationRoom,
+          logIndex: movementLog.length - 1
+        });
+      }
+
       function assignDevice(deviceId, targetRoom) {
         var cleanDeviceId = normalizeId(deviceId).toUpperCase();
         var destinationRoom = selectionToRoom(targetRoom);
@@ -598,19 +686,7 @@
           return false;
         }
 
-        devices[cleanDeviceId].currentRoom = destinationRoom;
-        var entry = {
-          timestamp: new Date().toISOString(),
-          device: cleanDeviceId,
-          room: roomToLabel(destinationRoom)
-        };
-        movementLog.push(entry);
-        assignmentStack.push({
-          device: cleanDeviceId,
-          previousRoom: previousRoom,
-          newRoom: destinationRoom,
-          logIndex: movementLog.length - 1
-        });
+        recordAssignment(cleanDeviceId, previousRoom, destinationRoom);
 
         saveState();
         renderAll();
@@ -620,6 +696,26 @@
         } else {
           showBanner(cleanDeviceId + " assigned to " + roomToLabel(destinationRoom) + ".", "success");
         }
+        return true;
+      }
+
+      function unassignDevice(deviceId) {
+        var cleanDeviceId = normalizeId(deviceId).toUpperCase();
+        if (!cleanDeviceId || !devices[cleanDeviceId]) {
+          showBanner("Device not recognized.", "error");
+          return false;
+        }
+
+        var previousRoom = roomOf(cleanDeviceId);
+        if (!previousRoom) {
+          showBanner(cleanDeviceId + " is already unassigned.", "warn");
+          return false;
+        }
+
+        recordAssignment(cleanDeviceId, previousRoom, null);
+        saveState();
+        renderAll();
+        showBanner(cleanDeviceId + " unassigned from " + previousRoom + ".", "success");
         return true;
       }
 
@@ -661,15 +757,40 @@
         unassignedOption.textContent = UNASSIGNED_LABEL;
         els.roomSelect.appendChild(unassignedOption);
 
-        rooms.forEach(function (room) {
+        rooms.slice().sort(function (a, b) {
+          return a.localeCompare(b);
+        }).forEach(function (room) {
           var option = document.createElement("option");
           option.value = room;
-          option.textContent = room;
+          option.textContent = formatRoomOptionLabel(room);
           els.roomSelect.appendChild(option);
         });
 
         if (selected && (selected === UNASSIGNED_VALUE || rooms.indexOf(selected) !== -1)) {
           els.roomSelect.value = selected;
+        }
+      }
+
+      function buildRoomViewSelect() {
+        var selected = els.roomViewSelect.value;
+        els.roomViewSelect.innerHTML = "";
+
+        var placeholder = document.createElement("option");
+        placeholder.value = "";
+        placeholder.textContent = "-- Choose a room --";
+        els.roomViewSelect.appendChild(placeholder);
+
+        rooms.slice().sort(function (a, b) {
+          return a.localeCompare(b);
+        }).forEach(function (room) {
+          var option = document.createElement("option");
+          option.value = room;
+          option.textContent = formatRoomOptionLabel(room);
+          els.roomViewSelect.appendChild(option);
+        });
+
+        if (selected && rooms.indexOf(selected) !== -1) {
+          els.roomViewSelect.value = selected;
         }
       }
 
@@ -682,7 +803,9 @@
         placeholder.textContent = "-- Choose a device --";
         els.deviceSelect.appendChild(placeholder);
 
-        Object.keys(devices).sort().forEach(function (deviceId) {
+        Object.keys(devices).sort(function (a, b) {
+          return a.localeCompare(b);
+        }).forEach(function (deviceId) {
           var option = document.createElement("option");
           option.value = deviceId;
           option.textContent = deviceId + " (" + roomToLabel(devices[deviceId].currentRoom) + ")";
@@ -697,6 +820,29 @@
         var typed = normalizeId(els.deviceInput.value).toUpperCase();
         if (typed && devices[typed]) {
           els.deviceSelect.value = typed;
+        }
+      }
+
+      function buildLookupDeviceSelect() {
+        var selected = normalizeId(els.lookupDeviceSelect.value).toUpperCase();
+        els.lookupDeviceSelect.innerHTML = "";
+
+        var placeholder = document.createElement("option");
+        placeholder.value = "";
+        placeholder.textContent = "-- Choose a device --";
+        els.lookupDeviceSelect.appendChild(placeholder);
+
+        Object.keys(devices).sort(function (a, b) {
+          return a.localeCompare(b);
+        }).forEach(function (deviceId) {
+          var option = document.createElement("option");
+          option.value = deviceId;
+          option.textContent = deviceId + " (" + roomToLabel(devices[deviceId].currentRoom) + ")";
+          els.lookupDeviceSelect.appendChild(option);
+        });
+
+        if (selected && devices[selected]) {
+          els.lookupDeviceSelect.value = selected;
         }
       }
 
@@ -722,20 +868,23 @@
       }
 
       function setActiveTab(tabName) {
-        if (tabName === "lookup" || tabName === "data") {
+        if (tabName === "lookup" || tabName === "data" || tabName === "roomView") {
           activeTab = tabName;
         } else {
           activeTab = "operations";
         }
 
         var isOperations = activeTab === "operations";
+        var isRoomView = activeTab === "roomView";
         var isLookup = activeTab === "lookup";
         var isData = activeTab === "data";
 
         els.operationsTabBtn.classList.toggle("active", isOperations);
+        els.roomViewTabBtn.classList.toggle("active", isRoomView);
         els.lookupTabBtn.classList.toggle("active", isLookup);
         els.dataTabBtn.classList.toggle("active", isData);
         els.operationsTab.classList.toggle("active", isOperations);
+        els.roomViewTab.classList.toggle("active", isRoomView);
         els.lookupTab.classList.toggle("active", isLookup);
         els.dataTab.classList.toggle("active", isData);
       }
@@ -807,15 +956,117 @@
         });
       }
 
-      function getLookupMatches(query) {
-        return Object.keys(devices).filter(function (id) {
-          return id.indexOf(query) !== -1;
+      function getRoomHistoryEntries(roomName) {
+        var lastKnownRoomByDevice = {};
+
+        return movementLog.map(function (entry) {
+          var previousRoom = lastKnownRoomByDevice[entry.device] || null;
+          var nextRoom = entry.room === UNASSIGNED_LABEL ? null : entry.room;
+          lastKnownRoomByDevice[entry.device] = nextRoom;
+
+          if (previousRoom !== roomName && nextRoom !== roomName) {
+            return null;
+          }
+
+          var action = "";
+          if (nextRoom === roomName && previousRoom === roomName) {
+            action = "Reassigned to " + roomName;
+          } else if (nextRoom === roomName) {
+            action = previousRoom ? ("Moved in from " + previousRoom) : "Assigned to " + roomName;
+          } else if (nextRoom) {
+            action = "Moved out to " + nextRoom;
+          } else {
+            action = "Unassigned from " + roomName;
+          }
+
+          return {
+            timestamp: entry.timestamp,
+            device: entry.device,
+            action: action
+          };
+        }).filter(Boolean).reverse();
+      }
+
+      function updateRoomView() {
+        var selectedRoom = normalizeId(els.roomViewSelect.value);
+        els.roomViewDeviceList.innerHTML = "";
+        els.roomHistoryBody.innerHTML = "";
+
+        if (!selectedRoom) {
+          els.roomViewHeading.textContent = "Devices currently in: (none selected)";
+          els.roomViewCount.textContent = "Select a room to inspect its assigned devices.";
+          els.roomHistoryHeading.textContent = "Room History";
+          return;
+        }
+
+        els.roomViewHeading.textContent = "Devices currently in: " + selectedRoom;
+
+        var assignedDevices = Object.keys(devices).filter(function (deviceId) {
+          return devices[deviceId].currentRoom === selectedRoom;
+        }).sort();
+
+        els.roomViewCount.textContent = assignedDevices.length + " device" + (assignedDevices.length === 1 ? "" : "s") + " currently assigned.";
+
+        if (!assignedDevices.length) {
+          var emptyState = document.createElement("div");
+          emptyState.textContent = "No devices currently assigned to this room.";
+          els.roomViewDeviceList.appendChild(emptyState);
+        } else {
+          assignedDevices.forEach(function (deviceId) {
+            var row = document.createElement("div");
+            row.className = "device-list-item";
+
+            var label = document.createElement("strong");
+            label.textContent = deviceId;
+
+            var button = document.createElement("button");
+            button.type = "button";
+            button.className = "danger";
+            button.textContent = "Unassign";
+            button.addEventListener("click", function () {
+              unassignDevice(deviceId);
+            });
+
+            row.appendChild(label);
+            row.appendChild(button);
+            els.roomViewDeviceList.appendChild(row);
+          });
+        }
+
+        var historyEntries = getRoomHistoryEntries(selectedRoom);
+
+        els.roomHistoryHeading.textContent = "Room History (" + historyEntries.length + " entries)";
+
+        if (!historyEntries.length) {
+          var emptyRow = document.createElement("tr");
+          var emptyCell = document.createElement("td");
+          emptyCell.colSpan = 3;
+          emptyCell.textContent = "No recorded history for this room.";
+          emptyRow.appendChild(emptyCell);
+          els.roomHistoryBody.appendChild(emptyRow);
+          return;
+        }
+
+        historyEntries.forEach(function (entry) {
+          var tr = document.createElement("tr");
+          var tdTime = document.createElement("td");
+          var tdDevice = document.createElement("td");
+          var tdAction = document.createElement("td");
+          tdTime.textContent = formatTimestampForDisplay(entry.timestamp);
+          tdDevice.textContent = entry.device;
+          tdAction.textContent = entry.action;
+          tr.appendChild(tdTime);
+          tr.appendChild(tdDevice);
+          tr.appendChild(tdAction);
+          els.roomHistoryBody.appendChild(tr);
         });
       }
 
       function lookupDevice() {
-        var deviceId = normalizeId(els.lookupDeviceInput.value).toUpperCase();
+        var deviceId = normalizeId(els.lookupDeviceSelect.value).toUpperCase();
         els.lookupHistoryBody.innerHTML = "";
+        els.renameDeviceBtn.disabled = !deviceId;
+        els.deleteDeviceBtn.disabled = !deviceId;
 
         if (!deviceId) {
           els.lookupCurrentRoom.textContent = "No device selected.";
@@ -823,33 +1074,17 @@
           return;
         }
 
-        var resolvedDeviceId = deviceId;
-        if (!devices[resolvedDeviceId]) {
-          var matches = getLookupMatches(deviceId);
-          if (matches.length === 1) {
-            resolvedDeviceId = matches[0];
-          } else if (matches.length > 1) {
-            els.lookupCurrentRoom.textContent = "Multiple devices match. Select one from suggestions.";
-            els.lookupHistoryHeading.textContent = "Full Device History";
-            return;
-          } else {
-            els.lookupCurrentRoom.textContent = "Device not found.";
-            els.lookupHistoryHeading.textContent = "Full Device History";
-            return;
-          }
-        }
-
-        if (!devices[resolvedDeviceId]) {
+        if (!devices[deviceId]) {
           els.lookupCurrentRoom.textContent = "Device not found.";
           els.lookupHistoryHeading.textContent = "Full Device History";
           return;
         }
 
-        var currentRoom = devices[resolvedDeviceId].currentRoom;
+        var currentRoom = devices[deviceId].currentRoom;
         els.lookupCurrentRoom.textContent = "Current location: " + roomToLabel(currentRoom);
 
         var entries = movementLog.filter(function (entry) {
-          return entry.device === resolvedDeviceId;
+          return entry.device === deviceId;
         });
 
         els.lookupHistoryHeading.textContent = "Full Device History (" + entries.length + " entries)";
@@ -870,90 +1105,12 @@
           var tdDevice = document.createElement("td");
           var tdRoom = document.createElement("td");
           tdTime.textContent = formatTimestampForDisplay(entry.timestamp);
-          tdDevice.textContent = resolvedDeviceId;
+          tdDevice.textContent = deviceId;
           tdRoom.textContent = entry.room;
           tr.appendChild(tdTime);
           tr.appendChild(tdDevice);
           tr.appendChild(tdRoom);
           els.lookupHistoryBody.appendChild(tr);
-        });
-      }
-
-      function renderLookupSuggestions(items) {
-        els.lookupSuggestions.innerHTML = "";
-        latestLookupSuggestions = items;
-        selectedLookupSuggestionIndex = -1;
-
-        if (!items.length) {
-          els.lookupSuggestions.classList.remove("open");
-          return;
-        }
-
-        items.forEach(function (item, idx) {
-          var div = document.createElement("div");
-          div.className = "suggestion-item";
-          div.setAttribute("role", "option");
-          div.setAttribute("data-index", String(idx));
-
-          var left = document.createElement("span");
-          left.textContent = item.device;
-
-          var right = document.createElement("span");
-          right.className = "status-chip " + item.statusClass;
-          right.textContent = item.statusLabel;
-
-          div.appendChild(left);
-          div.appendChild(right);
-          div.addEventListener("mousedown", function (evt) {
-            evt.preventDefault();
-            pickLookupSuggestion(idx);
-          });
-          els.lookupSuggestions.appendChild(div);
-        });
-
-        els.lookupSuggestions.classList.add("open");
-      }
-
-      function pickLookupSuggestion(idx) {
-        var item = latestLookupSuggestions[idx];
-        if (!item) { return; }
-        els.lookupDeviceInput.value = item.device;
-        els.lookupSuggestions.classList.remove("open");
-        lookupDevice();
-      }
-
-      function updateLookupAutocomplete() {
-        var query = normalizeId(els.lookupDeviceInput.value).toUpperCase();
-        if (!query || query.length > 80) {
-          renderLookupSuggestions([]);
-          if (!query) {
-            lookupDevice();
-          }
-          return;
-        }
-
-        var matches = Object.keys(devices)
-          .filter(function (id) { return id.indexOf(query) !== -1; })
-          .map(function (id) {
-            var current = devices[id].currentRoom;
-            if (!current) {
-              return { device: id, statusLabel: "Unassigned", statusClass: "status-unassigned" };
-            }
-            return { device: id, statusLabel: "In " + current, statusClass: "status-other" };
-          });
-
-        renderLookupSuggestions(matches);
-      }
-
-      function highlightLookupSuggestion(index) {
-        var nodes = els.lookupSuggestions.querySelectorAll(".suggestion-item");
-        nodes.forEach(function (node, idx) {
-          if (idx === index) {
-            node.classList.add("active");
-            node.scrollIntoView({ block: "nearest" });
-          } else {
-            node.classList.remove("active");
-          }
         });
       }
 
@@ -1324,6 +1481,92 @@
         showBanner("Room " + roomId + " added.", "success");
       }
 
+      function renameSelectedDevice() {
+        var currentDeviceId = normalizeId(els.lookupDeviceSelect.value).toUpperCase();
+        if (!currentDeviceId || !devices[currentDeviceId]) {
+          showBanner("Select a device first.", "error");
+          return;
+        }
+
+        var renamedDeviceId = normalizeId(window.prompt("Enter the new device ID.", currentDeviceId)).toUpperCase();
+        if (!renamedDeviceId) {
+          showBanner("Rename canceled.", "warn");
+          return;
+        }
+        if (renamedDeviceId.length > 80) {
+          showBanner("Device ID is too long.", "error");
+          return;
+        }
+        if (renamedDeviceId === currentDeviceId) {
+          showBanner("No changes made.", "warn");
+          return;
+        }
+        if (devices[renamedDeviceId]) {
+          showBanner("A device with that ID already exists.", "error");
+          return;
+        }
+
+        devices[renamedDeviceId] = devices[currentDeviceId];
+        delete devices[currentDeviceId];
+
+        movementLog = movementLog.map(function (entry) {
+          if (entry.device === currentDeviceId) {
+            return {
+              timestamp: entry.timestamp,
+              device: renamedDeviceId,
+              room: entry.room
+            };
+          }
+          return entry;
+        });
+
+        assignmentStack = assignmentStack.map(function (entry) {
+          if (entry.device === currentDeviceId) {
+            return {
+              device: renamedDeviceId,
+              previousRoom: entry.previousRoom,
+              newRoom: entry.newRoom,
+              logIndex: entry.logIndex
+            };
+          }
+          return entry;
+        });
+
+        saveState();
+        renderAll();
+        els.lookupDeviceSelect.value = renamedDeviceId;
+        lookupDevice();
+        showBanner("Device " + currentDeviceId + " renamed to " + renamedDeviceId + ".", "success");
+      }
+
+      function deleteSelectedDevice() {
+        var deviceId = normalizeId(els.lookupDeviceSelect.value).toUpperCase();
+        if (!deviceId || !devices[deviceId]) {
+          showBanner("Select a device first.", "error");
+          return;
+        }
+
+        var confirmed = window.confirm("Delete device " + deviceId + "? This will permanently remove its current assignment and full history.");
+        if (!confirmed) {
+          showBanner("Delete canceled.", "warn");
+          return;
+        }
+
+        delete devices[deviceId];
+        movementLog = movementLog.filter(function (entry) {
+          return entry.device !== deviceId;
+        });
+        assignmentStack = assignmentStack.filter(function (entry) {
+          return entry.device !== deviceId;
+        });
+
+        saveState();
+        renderAll();
+        els.lookupDeviceSelect.value = "";
+        lookupDevice();
+        showBanner("Device " + deviceId + " deleted.", "success");
+      }
+
       function readFileText(file, onSuccess) {
         var reader = new FileReader();
         reader.onload = function () {
@@ -1347,12 +1590,14 @@
 
       function renderAll() {
         buildRoomSelect();
+        buildRoomViewSelect();
         buildDeviceSelect();
+        buildLookupDeviceSelect();
         applyDevicePickerMode();
         updateStats();
         updateRoomDevicesPanel();
         updateLogTable();
-        updateLookupAutocomplete();
+        updateRoomView();
         lookupDevice();
       }
 
@@ -1399,8 +1644,16 @@
           updateAutocomplete();
         });
 
+        els.roomViewSelect.addEventListener("change", function () {
+          clearBanner();
+          updateRoomView();
+        });
+
         els.operationsTabBtn.addEventListener("click", function () {
           setActiveTab("operations");
+        });
+        els.roomViewTabBtn.addEventListener("click", function () {
+          setActiveTab("roomView");
         });
         els.lookupTabBtn.addEventListener("click", function () {
           setActiveTab("lookup");
@@ -1424,40 +1677,8 @@
           clearBanner();
         });
 
-        els.lookupDeviceInput.addEventListener("keydown", function (evt) {
-          var max = latestLookupSuggestions.length - 1;
-
-          if (evt.key === "ArrowDown" && max >= 0) {
-            evt.preventDefault();
-            selectedLookupSuggestionIndex = selectedLookupSuggestionIndex >= max ? 0 : selectedLookupSuggestionIndex + 1;
-            highlightLookupSuggestion(selectedLookupSuggestionIndex);
-            return;
-          }
-
-          if (evt.key === "ArrowUp" && max >= 0) {
-            evt.preventDefault();
-            selectedLookupSuggestionIndex = selectedLookupSuggestionIndex <= 0 ? max : selectedLookupSuggestionIndex - 1;
-            highlightLookupSuggestion(selectedLookupSuggestionIndex);
-            return;
-          }
-
-          if (evt.key === "Enter") {
-            evt.preventDefault();
-            if (selectedLookupSuggestionIndex >= 0 && latestLookupSuggestions[selectedLookupSuggestionIndex]) {
-              pickLookupSuggestion(selectedLookupSuggestionIndex);
-            } else {
-              lookupDevice();
-            }
-            return;
-          }
-
-          if (evt.key === "Escape") {
-            els.lookupSuggestions.classList.remove("open");
-          }
-        });
-
-        els.lookupDeviceInput.addEventListener("input", function () {
-          updateLookupAutocomplete();
+        els.lookupDeviceSelect.addEventListener("change", function () {
+          clearBanner();
           lookupDevice();
         });
 
@@ -1497,9 +1718,6 @@
           if (!els.suggestions.contains(evt.target) && evt.target !== els.deviceInput) {
             els.suggestions.classList.remove("open");
           }
-          if (!els.lookupSuggestions.contains(evt.target) && evt.target !== els.lookupDeviceInput) {
-            els.lookupSuggestions.classList.remove("open");
-          }
         });
 
         els.assignBtn.addEventListener("click", handleAssignClick);
@@ -1525,7 +1743,8 @@
         els.exportRoomsBtn.addEventListener("click", exportRoomsCsv);
         els.exportDevicesBtn.addEventListener("click", exportDevicesCsv);
         els.exportJsonBtn.addEventListener("click", exportJsonBackup);
-        els.lookupDeviceBtn.addEventListener("click", lookupDevice);
+        els.renameDeviceBtn.addEventListener("click", renameSelectedDevice);
+        els.deleteDeviceBtn.addEventListener("click", deleteSelectedDevice);
       }
 
       loadState();
